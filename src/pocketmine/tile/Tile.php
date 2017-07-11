@@ -51,6 +51,7 @@ abstract class Tile extends Position{
 	const CAULDRON = "Cauldron";
 	const HOPPER = "Hopper";
 	const BEACON = "Beacon";
+	const ANVIL = "Anvil";
 
 	public static $tileCount = 1;
 
@@ -73,6 +74,7 @@ abstract class Tile extends Position{
 	public $tickTimer;
 
 	public static function init(){
+		self::registerTile(Anvil::class);
 		self::registerTile(Beacon::class);
 		self::registerTile(BrewingStand::class);
 		self::registerTile(Cauldron::class);
