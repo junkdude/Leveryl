@@ -11,10 +11,14 @@ This spoon is based off of PMMP (For Stability)
 
 # Features:
 - [X] Fully Functional **Elytra Wings** and **SlimeBlocks**
-- [ ] EnderChests
+- [X] **EnderPearls**
+- [X] **XP System** (Still needs to be Improved)
+- [X] **EnderChests**
 - [X] **Full Tesseract & PMMP PluginAPI Compatibility**
 - [X] **CustomPotions**
 - [X] **CustomEnchants**
+- [X] Full Implementation of **DevTools**
+- [X] Built-in **Plugin Manager**
 - [ ] 1.0.1 Blocks & Items
 - [X] **Toggleable PluginAPI Version Checking**
 - [ ] Fully Functional Nether

@@ -207,6 +207,7 @@ class Item implements ItemIds, \JsonSerializable{
 			self::$list[self::NETHER_WART] = NetherWart::class;
 			self::$list[self::POTION] = Potion::class;
 			self::$list[self::GLASS_BOTTLE] = GlassBottle::class;
+            self::$list[self::SPLASH_POTION] = SplashPotion::class;
 			self::$list[self::SPIDER_EYE] = SpiderEye::class;
 			self::$list[self::FERMENTED_SPIDER_EYE] = FermentedSpiderEye::class;
 			self::$list[self::BLAZE_POWDER] = BlazePowder::class;
@@ -236,6 +237,13 @@ class Item implements ItemIds, \JsonSerializable{
 			self::$list[self::NETHER_STAR] = NetherStar::class;
 			self::$list[self::ENCHANTED_GOLDEN_APPLE] = GoldenAppleEnchanted::class;
             self::$list[self::ELYTRA] = Elytra::class;
+            self::$list[self::SHULKER_SHELL] = ShulkerShell::class;
+            self::$list[self::SUGARCANE] = Sugarcane::class;
+            self::$list[self::ENDER_PEARL] = EnderPearl::class;
+            self::$list[self::EYE_OF_ENDER] = EyeOfEnder::class;
+            self::$list[self::DRAGONS_BREATH] = DragonsBreath::class;
+            self::$list[self::SHULKER_SHELL] = ShulkerShell::class;
+            self::$list[self::POPPED_CHORUS_FRUIT] = PoppedChorusFruit::class;
 
 			for($i = 0; $i < 256; ++$i){
 				if(Block::$list[$i] !== null){
@@ -641,42 +649,43 @@ class Item implements ItemIds, \JsonSerializable{
     }
 
     /**
-	 * @param Enchantment $ench
-	 */
-	public function addEnchantment(Enchantment $ench){
-		if(!$this->hasCompoundTag()){
-			$tag = new CompoundTag("", []);
-		}else{
-			$tag = $this->getNamedTag();
-		}
-
-		if(!isset($tag->ench)){
-			$tag->ench = new ListTag("ench", []);
-			$tag->ench->setTagType(NBT::TAG_Compound);
-		}
-
-		$found = false;
-
-		foreach($tag->ench as $k => $entry){
-			if($entry["id"] === $ench->getId()){
-				$tag->ench->{$k} = new CompoundTag("", [
-					"id" => new ShortTag("id", $ench->getId()),
-					"lvl" => new ShortTag("lvl", $ench->getLevel())
-				]);
-				$found = true;
-				break;
-			}
-		}
-
-		if(!$found){
-			$tag->ench->{count($tag->ench) + 1} = new CompoundTag("", [
-				"id" => new ShortTag("id", $ench->getId()),
-				"lvl" => new ShortTag("lvl", $ench->getLevel())
-			]);
-		}
-
-		$this->setNamedTag($tag);
-	}
+     * @param Enchantment $ench
+     */
+    public function addEnchantment(Enchantment $ench){
+        if(!$this->hasCompoundTag()){
+            $tag = new CompoundTag("", []);
+        }else{
+            $tag = $this->getNamedTag();
+        }
+        if(!isset($tag->ench)){
+            $tag->ench = new ListTag("ench", []);
+            $tag->ench->setTagType(NBT::TAG_Compound);
+        }
+        $found = false;
+        foreach($tag->ench as $k => $entry){
+            if($entry["id"] === $ench->getId()){
+                $tag->ench->{$k} = new CompoundTag("", [
+                    new ShortTag("id", $ench->getId()),
+                    new ShortTag("lvl", $ench->getLevel())
+                ]);
+                $found = true;
+                break;
+            }
+        }
+        if(!$found){
+            $count = 0;
+            foreach($tag->ench as $key => $value){
+                if(is_numeric($key)){
+                    $count++;
+                }
+            }
+            $tag->ench->{$count + 1} = new CompoundTag("", [
+                new ShortTag("id", $ench->getId()),
+                new ShortTag("lvl", $ench->getLevel())
+            ]);
+        }
+        $this->setNamedTag($tag);
+    }
 
 	/**
 	 * @return Enchantment[]

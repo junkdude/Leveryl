@@ -35,6 +35,7 @@ use pocketmine\entity\Item as DroppedItem;
 use pocketmine\entity\Living;
 use pocketmine\entity\Projectile;
 use pocketmine\event\block\ItemFrameDropItemEvent;
+use pocketmine\event\entity\EntityCombustByEntityEvent;
 use pocketmine\event\entity\EntityDamageByBlockEvent;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDamageEvent;
@@ -84,6 +85,7 @@ use pocketmine\inventory\ShapedRecipe;
 use pocketmine\inventory\ShapelessRecipe;
 use pocketmine\inventory\SimpleTransactionGroup;
 use pocketmine\item\Elytra;
+use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\Item;
 use pocketmine\level\ChunkLoader;
 use pocketmine\level\format\Chunk;
@@ -341,6 +343,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
     public $fromPos = null;
     /** @var  Position */
     private $shouldResPos;
+
+    protected $lastEnderPearlUse = 0;
 
     public $weatherData = [0, 0, 0];
 	/** @var PermissibleBase */
@@ -1478,7 +1482,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				}
 
 				$pk = new TakeItemEntityPacket();
-				$pk->eid = $this->id;
+				$pk->entityRuntimeId = $this->id;
 				$pk->target = $entity->getId();
 				$this->server->broadcastPacket($entity->getViewers(), $pk);
 
@@ -1508,7 +1512,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						}
 
 						$pk = new TakeItemEntityPacket();
-						$pk->eid = $this->id;
+						$pk->entityRuntimeId = $this->id;
 						$pk->target = $entity->getId();
 						$this->server->broadcastPacket($entity->getViewers(), $pk);
 
@@ -2511,7 +2515,30 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						$ev->setCancelled();
 					}
 
-					$target->attack($ev->getFinalDamage(), $ev);
+                    if($target->attack($ev->getFinalDamage(), $ev) === true){
+                        $fireAspectL = $item->getEnchantmentLevel(Enchantment::TYPE_WEAPON_FIRE_ASPECT);
+                        if($fireAspectL > 0){
+                            $fireEv = new EntityCombustByEntityEvent($this, $target, $fireAspectL * 4, $ev->getFireProtectL());
+                            Server::getInstance()->getPluginManager()->callEvent($fireEv);
+                            if(!$fireEv->isCancelled()){
+                                $target->setOnFire($fireEv->getDuration());
+                            }
+                        }
+                        //Thorns
+                        if($this->isSurvival()){
+                            $ev->createThornsDamage();
+                            if($ev->getThornsDamage() > 0){
+                                $thornsEvent = new EntityDamageByEntityEvent($target, $this, EntityDamageEvent::CAUSE_ENTITY_ATTACK, $ev->getThornsDamage(), 0);
+                                if(!$thornsEvent->isCancelled()){
+                                    if($this->attack($thornsEvent->getFinalDamage(), $thornsEvent) === true){
+                                        $thornsEvent->useArmors();
+                                        $ev->setThornsArmorUse();
+                                    }
+                                }
+                            }
+                        }
+                        $ev->useArmors();
+                    }
 
 					if($ev->isCancelled()){
 						if($item->isTool() and $this->isSurvival()){
@@ -3593,6 +3620,125 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			$this->controls = $packet->controls;
 		}
 
+		if($packet instanceof UseItemPacket){
+
+            if ($this->spawned === false or !$this->isAlive()) {
+                goto brk;
+            }
+
+            $blockVector = new Vector3($packet->x, $packet->y, $packet->z);
+
+            $this->craftingType = self::CRAFTING_SMALL;
+
+            if ($packet->face >= 0 and $packet->face <= 5) { //Use Block, place
+                $this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, false);
+
+                if (!$this->canInteract($blockVector->add(0.5, 0.5, 0.5), 13) or $this->isSpectator()) {
+
+                } elseif ($this->isCreative()) {
+                    $item = $this->inventory->getItemInHand();
+                    if ($this->level->useItemOn($blockVector, $item, $packet->face, $packet->fx, $packet->fy, $packet->fz, $this, true) === true) {
+                        goto brk;
+                    }
+                } elseif (!$this->inventory->getItemInHand()->equals($packet->item)) {
+                    $this->inventory->sendHeldItem($this);
+                } else {
+                    $item = $this->inventory->getItemInHand();
+                    $oldItem = clone $item;
+                    if ($this->level->useItemOn($blockVector, $item, $packet->face, $packet->fx, $packet->fy, $packet->fz, $this, true)) {
+                        if (!$item->equals($oldItem) or $item->getCount() !== $oldItem->getCount()) {
+                            $this->inventory->setItemInHand($item);
+                            $this->inventory->sendHeldItem($this->hasSpawned);
+                        }
+                        goto brk;
+                    }
+                }
+
+                $this->inventory->sendHeldItem($this);
+
+                if ($blockVector->distanceSquared($this) > 10000) {
+                    goto brk;
+                }
+                $target = $this->level->getBlock($blockVector);
+                $block = $target->getSide($packet->face);
+
+                $this->level->sendBlocks([$this], [$target, $block], UpdateBlockPacket::FLAG_ALL_PRIORITY);
+                goto brk;
+            } elseif ($packet->face === -1) {
+                $aimPos = (new Vector3($packet->x / 32768, $packet->y / 32768, $packet->z / 32768))->normalize();
+
+                if ($this->isCreative()) {
+                    $item = $this->inventory->getItemInHand();
+                } elseif (!$this->inventory->getItemInHand()->equals($packet->item)) {
+                    $this->inventory->sendHeldItem($this);
+                    goto brk;
+                } else {
+                    $item = $this->inventory->getItemInHand();
+                }
+
+                $ev = new PlayerInteractEvent($this, $item, $aimPos, $packet->face, PlayerInteractEvent::RIGHT_CLICK_AIR);
+
+                $this->server->getPluginManager()->callEvent($ev);
+
+                if ($ev->isCancelled()) {
+                    $this->inventory->sendHeldItem($this);
+                    goto brk;
+                }
+
+                $nbt = new CompoundTag("", [
+                    "Pos" => new ListTag("Pos", [
+                        new DoubleTag("", $this->x),
+                        new DoubleTag("", $this->y + $this->getEyeHeight()),
+                        new DoubleTag("", $this->z)
+                    ]),
+                    "Motion" => new ListTag("Motion", [
+                        new DoubleTag("", -sin($this->yaw / 180 * M_PI) * cos($this->pitch / 180 * M_PI)),
+                        new DoubleTag("", -sin($this->pitch / 180 * M_PI)),
+                        new DoubleTag("", cos($this->yaw / 180 * M_PI) * cos($this->pitch / 180 * M_PI))
+                    ]),
+                    "Rotation" => new ListTag("Rotation", [
+                        new FloatTag("", $this->yaw),
+                        new FloatTag("", $this->pitch)
+                    ])
+                ]);
+
+                $entity = null;
+                $reduce = true;
+
+
+                if($item->getId() === Item::ENDER_PEARL) {
+                    if (floor(($time = microtime(true)) - $this->lastEnderPearlUse) >= 1) {
+                        $f = 1.1;
+                        $entity = Entity::createEntity("EnderPearl", $this->getLevel(), $nbt, $this);
+                        $entity->setMotion($entity->getMotion()->multiply($f));
+                        if($entity instanceof Projectile){
+                            $this->server->getPluginManager()->callEvent($ev = new ProjectileLaunchEvent($entity));
+                        }
+                        if ($ev->isCancelled()) {
+                            $entity->kill();
+                        } else {
+                            $this->lastEnderPearlUse = $time;
+                        }
+                    }
+                }
+
+
+                if ($entity instanceof Projectile and $entity->isAlive()) {
+                    if ($reduce and $this->isSurvival()) {
+                        $item->setCount($item->getCount() - 1);
+                        $this->inventory->setItemInHand($item->getCount() > 0 ? $item : Item::get(Item::AIR));
+                    }
+                    $entity->spawnToAll();
+                    $this->level->addSound(new LaunchSound($this), $this->getViewers());
+                }
+
+                $this->setDataFlag(self::DATA_FLAGS, self::DATA_FLAG_ACTION, true);
+                $this->startAction = $this->server->getTick();
+            }
+        }
+
+        brk:
+
 		$timings->stopTiming();
 	}
 
@@ -3669,23 +3815,23 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
         }
         $this->sendTitleText($title, SetTitlePacket::TYPE_SET_TITLE);
     }
-	
-	/**
-	 * Adds a title text to the user's screen, with an optional subtitle.
-	 *
-	 * @param string $title
-	 * @param string $subtitle
-	 * @param int	$fadeIn Duration in ticks for fade-in. If -1 is given, client-sided defaults will be used.
-	 * @param int	$stay Duration in ticks to stay on screen for
-	 * @param int	$fadeOut Duration in ticks for fade-out.
-	 */
-	public function addTitle(string $title, string $subtitle = "", int $fadeIn = -1, int $stay = -1, int $fadeOut = -1){
-		$this->setTitleDuration($fadeIn, $stay, $fadeOut);
-		if($subtitle !== ""){
-			$this->addSubTitle($subtitle);
-		}
-		$this->sendTitleText($title, SetTitlePacket::TYPE_SET_TITLE);
-	}
+
+    /**
+     * Adds a title text to the user's screen, with an optional subtitle.
+     *
+     * @param string $title
+     * @param string $subtitle
+     * @param int	$fadeIn Duration in ticks for fade-in. If -1 is given, client-sided defaults will be used.
+     * @param int	$stay Duration in ticks to stay on screen for
+     * @param int	$fadeOut Duration in ticks for fade-out.
+     */
+    public function addTitle(string $title, string $subtitle = "", int $fadeIn = -1, int $stay = -1, int $fadeOut = -1){
+        $this->setTitleDuration($fadeIn, $stay, $fadeOut);
+        if($subtitle !== ""){
+            $this->addSubTitle($subtitle);
+        }
+        $this->sendTitleText($title, SetTitlePacket::TYPE_SET_TITLE);
+    }
 
 	/**
 	 * Sets the subtitle message, without sending a title.
@@ -4409,7 +4555,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 	public function getDeviceModel(): string
 	{
-		return $this->devicemodel;
+		return $this->devicemodel ?? "null";
 	}
 
 	public function getGUIMode($mode = "string")
@@ -4421,7 +4567,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			return $this->uiprofile;
 		} else {
 			$this->server->getLogger()->warning("getGUIMode() mode ERROR! There are only two modes available: (\"string\", \"int\")... Falling back to string mode.");
-			return $this->deviceos;
+			return $UI[$this->uiprofile];
 		}
 	}
 
@@ -4450,9 +4596,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 			return $GUIScale[$this->guiscale];
 		}
 	}
-	
+
 	public function getItemInHand()
-	{	
-		return $this->inventory->getItemInHand();
-	}
+    {
+        return $this->inventory->getItemInHand();
+    }
 }

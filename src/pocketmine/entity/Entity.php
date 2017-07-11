@@ -212,16 +212,53 @@ abstract class Entity extends Location implements Metadatable{
 	private static $shortNames = [];
 
 	public static function init(){
-		Entity::registerEntity(Arrow::class);
-		Entity::registerEntity(FallingSand::class);
-		Entity::registerEntity(Item::class);
-		Entity::registerEntity(PrimedTNT::class);
-		Entity::registerEntity(Snowball::class);
-		Entity::registerEntity(Squid::class);
-		Entity::registerEntity(Villager::class);
-		Entity::registerEntity(Zombie::class);
-
 		Entity::registerEntity(Human::class, true);
+
+        Entity::registerEntity(Arrow::class);
+        Entity::registerEntity(Bat::class);
+        Entity::registerEntity(Blaze::class);
+        Entity::registerEntity(CaveSpider::class);
+        Entity::registerEntity(Chicken::class);
+        Entity::registerEntity(Cow::class);
+        Entity::registerEntity(Creeper::class);
+        //Entity::registerEntity(DroppedItem::class);
+        Entity::registerEntity(Egg::class);
+        Entity::registerEntity(Enderman::class);
+        Entity::registerEntity(EnderPearl::class);
+        Entity::registerEntity(FallingSand::class);
+        Entity::registerEntity(FishingHook::class);
+        Entity::registerEntity(Ghast::class);
+        Entity::registerEntity(Horse::class);
+        Entity::registerEntity(Husk::class);
+        Entity::registerEntity(IronGolem::class);
+        Entity::registerEntity(Item::class);
+        Entity::registerEntity(LavaSlime::class); //Magma Cube
+        Entity::registerEntity(Lightning::class);
+        Entity::registerEntity(Mooshroom::class);
+        Entity::registerEntity(Ocelot::class);
+        Entity::registerEntity(Painting::class);
+        Entity::registerEntity(Pig::class);
+        Entity::registerEntity(PigZombie::class);
+        Entity::registerEntity(PrimedTNT::class);
+        Entity::registerEntity(Rabbit::class);
+        Entity::registerEntity(Sheep::class);
+        Entity::registerEntity(Silverfish::class);
+        Entity::registerEntity(Skeleton::class);
+        Entity::registerEntity(Slime::class);
+        Entity::registerEntity(Snowball::class);
+        Entity::registerEntity(SnowGolem::class);
+        Entity::registerEntity(Spider::class);
+        Entity::registerEntity(Squid::class);
+        Entity::registerEntity(Stray::class);
+        Entity::registerEntity(ThrownExpBottle::class);
+        Entity::registerEntity(ThrownPotion::class);
+        Entity::registerEntity(Villager::class);
+        Entity::registerEntity(Witch::class);
+        Entity::registerEntity(Wither::class);
+        Entity::registerEntity(Wolf::class);
+        Entity::registerEntity(XPOrb::class);
+        Entity::registerEntity(Zombie::class);
+        Entity::registerEntity(ZombieVillager::class);
 	}
 
 	/**
@@ -553,9 +590,9 @@ abstract class Entity extends Location implements Metadatable{
 	 * @return Entity|null
 	 */
 	public function getOwningEntity(){
-		$eid = $this->getOwningEntityId();
-		if($eid !== null){
-			return $this->server->findEntity($eid, $this->level);
+		$entityRuntimeId = $this->getOwningEntityId();
+		if($entityRuntimeId !== null){
+			return $this->server->findEntity($entityRuntimeId, $this->level);
 		}
 
 		return null;
@@ -591,9 +628,9 @@ abstract class Entity extends Location implements Metadatable{
 	 * @return Entity|null
 	 */
 	public function getTargetEntity(){
-		$eid = $this->getTargetEntityId();
-		if($eid !== null){
-			return $this->server->findEntity($eid, $this->level);
+		$entityRuntimeId = $this->getTargetEntityId();
+		if($entityRuntimeId !== null){
+			return $this->server->findEntity($entityRuntimeId, $this->level);
 		}
 
 		return null;
@@ -1257,6 +1294,7 @@ abstract class Entity extends Location implements Metadatable{
 
 		$tickDiff = $currentTick - $this->lastUpdate;
 		if($tickDiff <= 0){
+            $this->server->getLogger()->debug("Expected tick difference of at least 1, got $tickDiff for " . get_class($this));
 			return false;
 		}
 
