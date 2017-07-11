@@ -23,11 +23,18 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+
 use pocketmine\inventory\AnvilInventory;
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\StringTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\Player;
-
+use pocketmine\tile\Tile;
+use pocketmine\tile\Anvil;
+use pocketmine\nbt\NBT;
 class Anvil extends Fallable{
 
 	const TYPE_NORMAL = 0;
@@ -71,7 +78,23 @@ class Anvil extends Fallable{
 
 	public function onActivate(Item $item, Player $player = null){
 		if($player instanceof Player){
-			$player->addWindow(new AnvilInventory($this));
+			//TODO lock
+			$t = $this->getLevel()->getTile($this);
+			$table = null;
+			if($t instanceof EnchantTable){
+				$table = $t;
+			}else{
+				$nbt = new CompoundTag("", [
+					new ListTag("Items", []),
+					new StringTag("id", Tile::ANVIL),
+					new IntTag("x", $this->x),
+					new IntTag("y", $this->y),
+					new IntTag("z", $this->z)
+				]);
+				$nbt->Items->setTagType(NBT::TAG_Compound);
+				$table = Tile::createTile(TILE::ANVIL, $this->getLevel(), $nbt);
+			}
+			$player->addWindow($table->getInventory());
 		}
 
 		return true;
@@ -81,6 +104,24 @@ class Anvil extends Fallable{
 		$direction = ($player !== null ? $player->getDirection() : 0) & 0x03;
 		$this->meta = ($this->meta & 0x0c) | $direction;
 		$this->getLevel()->setBlock($block, $this, true, true);
+		$nbt = new CompoundTag("", [
+			new StringTag("id", Tile::ANVIL),
+			new IntTag("x", $this->x),
+			new IntTag("y", $this->y),
+			new IntTag("z", $this->z)
+		]);
+		$tile = Tile::createTile(TILE::ANVIL, $this->getLevel(), $nbt);
+		if($item->hasCustomName()){
+			$nbt->CustomName = new StringTag("CustomName", $item->getCustomName());
+		}
+
+		if($item->hasCustomBlockData()){
+			foreach($item->getCustomBlockData() as $key => $v){
+				$nbt->{$key} = $v;
+			}
+		}
+
+		Tile::createTile(Tile::ANVIL, $this->getLevel(), $nbt);
 	}
 
 	public function getDrops(Item $item){
